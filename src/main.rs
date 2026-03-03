@@ -1,4 +1,5 @@
  use uuid::Uuid;
+ use std::collections::VecDeque;
 
 
 fn main() {
@@ -95,10 +96,10 @@ impl TreeNode {
     fn add_child(&mut self, child:TreeNode) {
         let own_vertex = self.event.vertx_for_event_type();
         let child_vertex = child.event.vertx_for_event_type();
-        if own_vertex.x > child_vertex.x {
-            self.left = Some(Box::new(child));
-        } else {
+        if own_vertex.x < child_vertex.x {
             self.right = Some(Box::new(child));
+        } else {
+            self.left = Some(Box::new(child));
         }
     }
 
@@ -151,13 +152,13 @@ impl ScanEvent {
 
 #[derive(Debug)]
 struct ScanEvents {
-    events:Vec<ScanEvent>
+    events:VecDeque<ScanEvent>
 }
 
 impl ScanEvents {
 
     fn new() -> ScanEvents {
-        ScanEvents{events:Vec::new()}
+        ScanEvents{events:VecDeque::new()}
     }
 
    
@@ -171,7 +172,7 @@ impl ScanEvents {
             Some(value) => {
                 self.events.insert(value, se);
             },
-            None => { self.events.push(se); } //Empty vector, or add at end
+            None => { self.events.push_back(se); } //Empty vector, or add at end
         }
         
        
@@ -711,10 +712,41 @@ mod tests {
         
     }
 
+
+    #[test]
+    fn test_scan_events_inserted_correctly(){
+        let p1_1 = Vertex{x:10.0, y:1.0};
+        let p1_2 = Vertex{x:1.0,y:10.0};
+        let l1 = Line::new(p1_1, p1_2);
+        let scan_event = ScanEvent::new_event(EventType::START, l1.clone());
+       
+        let scan_events = ScanEvents::new();
+        let scan_events = scan_events.add_event(scan_event);
+        assert_eq!(scan_events.events.get(0).unwrap().event_type, EventType::START);
+        let scan_event = ScanEvent::new_event(EventType::END, l1.clone());
+        let scan_events = scan_events.add_event(scan_event);
+        assert_eq!(scan_events.events.get(0).unwrap().event_type, EventType::START);
+
+        let p1_1 = Vertex{x:1.0, y:1.0};
+        let p1_2 = Vertex{x:10.0,y:10.0};
+        let l2 = Line::new(p1_1, p1_2);
+        let scan_event = ScanEvent::new_event(EventType::START, l2.clone());
+        let scan_events = scan_events.add_event(scan_event);
+        assert_eq!(scan_events.events.get(0).unwrap().event_type, EventType::START);
+        let scan_event = ScanEvent::new_event(EventType::END, l2.clone());
+        let scan_events = scan_events.add_event(scan_event);
+        assert_eq!(scan_events.events.get(0).unwrap().event_type, EventType::START);
+        assert_eq!(scan_events.events.get(1).unwrap().event_type, EventType::START);
+        assert_eq!(scan_events.events.get(2).unwrap().event_type, EventType::END);
+        assert_eq!(scan_events.events.get(3).unwrap().event_type, EventType::END);
+        let v = scan_events.events.get(1).unwrap().vertx_for_event_type().clone();
+        assert_eq!(v.x, 10.0);
+        assert_eq!(scan_events.events.len(),4);
+    }
   
     #[test]
     fn test_create_tree_from_scan_events() {
-                let p1_1 = Vertex{x:10.0, y:1.0};
+        let p1_1 = Vertex{x:10.0, y:1.0};
         let p1_2 = Vertex{x:1.0,y:10.0};
         let l1 = Line::new(p1_1, p1_2);
         let scan_event = ScanEvent::new_event(EventType::START, l1.clone());
@@ -730,10 +762,11 @@ mod tests {
         let scan_events = scan_events.add_event(scan_event);
         let scan_event = ScanEvent::new_event(EventType::END, l2.clone());
         let mut scan_events = scan_events.add_event(scan_event);
+
+        assert_eq!(scan_events.events.len(),4);
         
         let mut more_elements = true;
-
-        let mut  root_node =  match scan_events.events.pop() {
+        let mut  root_node =  match scan_events.events.pop_front() {
                 Some(value) => {
                    Some(TreeNode::new("0".to_string(),None,None,value))
                 },
@@ -742,10 +775,11 @@ mod tests {
                 }
             };
        
-       
+        assert_eq!(scan_events.events.len(),3);
+        assert_eq!(root_node.as_mut().expect("root is none").event.event_type, EventType::START);
 
         while more_elements == true {
-            match scan_events.events.pop() {
+            match scan_events.events.pop_front() {
                 Some(value) => {
                     //Create the root node if not created
                     let vertex = value.vertx_for_event_type().clone();
@@ -758,6 +792,19 @@ mod tests {
                 
             }
         }
+
+        //Check the tree structure
+        let root_right = root_node.as_ref().expect("root is none").right.as_ref().expect("root right is none");
+        let v = root_right.event.vertx_for_event_type().clone();
+        assert_eq!(v.x,10.0);
+        assert_eq!(v.y,1.0);
+        assert_eq!(root_right.event.event_type, EventType::START);
+        let root_left = root_node.as_ref().expect("root is none").left.as_ref().expect("root left is none");
+        let v = root_left.event.vertx_for_event_type().clone();
+        assert_eq!(v.x,1.0);
+        assert_eq!(v.y,10.0);
+        assert_eq!(root_left.event.event_type, EventType::END);
+        
     }
 
 }
