@@ -110,6 +110,40 @@ struct BinaryTree {
     root:TreeNode
 }
 
+impl BinaryTree {
+
+
+        fn create(mut scan_events:ScanEvents) -> BinaryTree {
+             let mut more_elements = true;
+             let mut  root_node =  match scan_events.events.pop_front() {
+                Some(value) => {
+                   Some(TreeNode::new("0".to_string(),None,None,value))
+                },
+                None => {
+                    None
+                }
+            };
+       
+      
+            while more_elements == true {
+                match scan_events.events.pop_front() {
+                    Some(value) => {
+                        //Create the root node if not created
+                        let vertex = value.vertx_for_event_type().clone();
+                        //Use the root node to find the parent
+                        let parent_to_add_to : &mut TreeNode = root_node.as_mut().expect("not none").find_parent(vertex);
+                        parent_to_add_to.add_child(TreeNode::new_id(None,None,value));
+                    },
+                    None => {
+                        more_elements = false;}
+                }
+            };
+
+            BinaryTree{root:root_node.expect("Cannot construct tree root_node is none")}
+        }
+
+}
+
 #[derive(Debug)]
 #[derive(PartialEq)]
 #[derive(Default)]
@@ -789,7 +823,6 @@ mod tests {
                 },
                 None => {
                     more_elements = false;}
-                
             }
         }
 
@@ -805,6 +838,40 @@ mod tests {
         assert_eq!(v.y,10.0);
         assert_eq!(root_left.event.event_type, EventType::END);
         
+    }
+
+    #[test]
+    fn test_binary_tree_construct(){
+                let p1_1 = Vertex{x:10.0, y:1.0};
+        let p1_2 = Vertex{x:1.0,y:10.0};
+        let l1 = Line::new(p1_1, p1_2);
+        let scan_event = ScanEvent::new_event(EventType::START, l1.clone());
+       
+        let scan_events = ScanEvents::new();
+        let scan_events = scan_events.add_event(scan_event);
+        let scan_event = ScanEvent::new_event(EventType::END, l1.clone());
+        let scan_events = scan_events.add_event(scan_event);
+        let p1_1 = Vertex{x:1.0, y:1.0};
+        let p1_2 = Vertex{x:10.0,y:10.0};
+        let l2 = Line::new(p1_1, p1_2);
+        let scan_event = ScanEvent::new_event(EventType::START, l2.clone());
+        let scan_events = scan_events.add_event(scan_event);
+        let scan_event = ScanEvent::new_event(EventType::END, l2.clone());
+        let scan_events = scan_events.add_event(scan_event);
+
+        let binary_tree = BinaryTree::create(scan_events);
+
+        let root_right = binary_tree.root.right.as_ref().expect("root right is none");
+        let v = root_right.event.vertx_for_event_type().clone();
+        assert_eq!(v.x,10.0);
+        assert_eq!(v.y,1.0);
+        assert_eq!(root_right.event.event_type, EventType::START);
+        let root_left = binary_tree.root.left.as_ref().expect("root left is none");
+        let v = root_left.event.vertx_for_event_type().clone();
+        assert_eq!(v.x,1.0);
+        assert_eq!(v.y,10.0);
+        assert_eq!(root_left.event.event_type, EventType::END);
+
     }
 
 }
