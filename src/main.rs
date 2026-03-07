@@ -154,11 +154,32 @@ impl BinaryTree {
             while more_elements == true {
                 match scan_events.events.pop_front() {
                     Some(value) => {
-                        //Create the root node if not created
                         let vertex = value.vertx_for_event_type().clone();
-                        //Use the root node to find the parent
-                        let parent_to_add_to : &mut TreeNode = root_node.as_mut().expect("not none").find_insertion_parent(vertex);
-                        parent_to_add_to.add_child(TreeNode::new_id(None,None,value));
+                        match value.event_type {
+                            EventType::START => {
+                                 //Use the root node to find the parent
+                                let parent_to_add_to : &mut TreeNode = root_node.as_mut().expect("not none").find_insertion_parent(vertex);
+                                let child_line = value.lines.get(0).expect("event event must have a line new node").clone();
+                                parent_to_add_to.add_child(TreeNode::new_id(None,None,value));
+                                //Check for intersection agains the line held by the parent
+                                let parent_line = parent_to_add_to.event.lines.get(0).expect("every event must have a line parent").clone();
+                                
+                                match parent_line.intersects(&child_line) {
+                                    Some(intsec) => {
+                                            let isevent = ScanEvent::new_intersection_event(intsec,parent_line.clone(), child_line.clone());
+                                            scan_events.events.push_back(isevent);
+                                    },
+                                    None => {}//nothing to do
+                                };
+                            },
+                            EventType::END => {
+                                let parent_to_add_to : &mut TreeNode = root_node.as_mut().expect("not none").find_insertion_parent(vertex);
+                                parent_to_add_to.add_child(TreeNode::new_id(None,None,value));
+                            },
+                            EventType::INTERSECTION => {}
+                        }
+                        
+                       
                     },
                     None => {
                         more_elements = false;}
@@ -277,7 +298,7 @@ impl Line {
         sum.sqrt()
     }
 
-    fn intersects(&self,l2:Line) -> Option<Vertex> {
+    fn intersects(&self,l2:&Line) -> Option<Vertex> {
         let x1 = (l2.intercept-self.intercept)/(self.m - l2.m);
         let y1 = self.m*x1+self.intercept;
         let y2 = l2.m*x1+l2.intercept;
@@ -510,7 +531,7 @@ mod tests {
         p_1 = Vertex{x:1.0, y:3.0};
         p_2 = Vertex{x:3.0,y:1.0};
         let l2 = Line::new(p_1, p_2);
-        let intersection = l1.intersects(l2);
+        let intersection = l1.intersects(&l2);
         match intersection {
             Some(value) => {
                 assert_eq!(value.x, 2.0);
@@ -745,7 +766,7 @@ mod tests {
         let scan_event = ScanEvent::new_event(EventType::END, l2.clone());
         let scan_events = scan_events.add_event(scan_event);
      
-        let intersection = l1.intersects(l2.clone());
+        let intersection = l1.intersects(&l2);
         let vertex = match intersection {
             Some(value) => {
                 value
@@ -988,7 +1009,7 @@ mod tests {
         let line_right = root_right.event.lines.get(0).expect("Empty lines.").clone();
         let node = binary_tree.root.find_parent_mut(vtx.clone());      
         let line_parent = node.expect("Parent is none").event.lines.get(0).expect("Empty lines.").clone();
-        let vrtxo = line_parent.intersects(line_right);
+        let vrtxo = line_parent.intersects(&line_right);
         assert_ne!(vrtxo, None);
        
     }
