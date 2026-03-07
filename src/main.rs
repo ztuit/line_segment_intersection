@@ -67,31 +67,57 @@ impl TreeNode {
         TreeNode::new(id.to_string(),l,r,e)
     }
 
-    /* fn add_event(&mut self, se:&'a ScanEvent) {
-        //Compare verticies on this and the input and choose right or left
-          
-        //If left or right doesn't exist then create new treenode and set
-        //If the node exists then recurse to see if this new event should be right or left
-        //what do we do about intersections?
-    }*/
 
-     fn find_parent(&mut self, val:Vertex) -> &mut TreeNode {
+    //Find the parent without a child on the correct branch
+     fn find_insertion_parent(&mut self, val:Vertex) -> &mut TreeNode {
 
            let cmp_vertex = self.event.vertx_for_event_type();
 
          if cmp_vertex.x<val.x {
 
             if self.right.is_none() == false{
-                return self.right.as_mut().expect("Not none").find_parent(val)
+                return self.right.as_mut().expect("Not none").find_insertion_parent(val)
             }
             
         } else {
              if self.left.is_none() == false {
-                return self.left.as_mut().expect("Not none").find_parent(val)
+                return self.left.as_mut().expect("Not none").find_insertion_parent(val)
             }
         }
         self
     }
+
+    /// Mutable version of find_parent
+    fn find_parent_mut(&mut self, val: Vertex) -> Option<&mut TreeNode> {
+        // Check if left child holds the vertex
+        let left_match = if let Some(ref left) = self.left {
+            let v = left.event.vertx_for_event_type();
+            v.x == val.x && v.y == val.y
+        } else { false };
+
+        let right_match = if let Some(ref right) = self.right {
+            let v = right.event.vertx_for_event_type();
+            v.x == val.x && v.y == val.y
+        } else { false };
+
+        if left_match || right_match {
+            return Some(self);
+        }
+
+        // Recurse into the appropriate subtree
+        let cmp_vertex = self.event.vertx_for_event_type();
+        if cmp_vertex.x < val.x {
+            if let Some(ref mut right) = self.right {
+                return right.find_parent_mut(val);
+            }
+        } else {
+            if let Some(ref mut left) = self.left {
+                return left.find_parent_mut(val);
+            }
+        }
+        None
+    }
+
 
     fn add_child(&mut self, child:TreeNode) {
         let own_vertex = self.event.vertx_for_event_type();
@@ -113,7 +139,7 @@ struct BinaryTree {
 impl BinaryTree {
 
 
-        fn create(mut scan_events:ScanEvents) -> BinaryTree {
+        fn create( scan_events:&mut ScanEvents) -> BinaryTree {
              let mut more_elements = true;
              let mut  root_node =  match scan_events.events.pop_front() {
                 Some(value) => {
@@ -131,7 +157,7 @@ impl BinaryTree {
                         //Create the root node if not created
                         let vertex = value.vertx_for_event_type().clone();
                         //Use the root node to find the parent
-                        let parent_to_add_to : &mut TreeNode = root_node.as_mut().expect("not none").find_parent(vertex);
+                        let parent_to_add_to : &mut TreeNode = root_node.as_mut().expect("not none").find_insertion_parent(vertex);
                         parent_to_add_to.add_child(TreeNode::new_id(None,None,value));
                     },
                     None => {
@@ -818,7 +844,7 @@ mod tests {
                     //Create the root node if not created
                     let vertex = value.vertx_for_event_type().clone();
                     //Use the root node to find the parent
-                    let parent_to_add_to : &mut TreeNode = root_node.as_mut().expect("not none").find_parent(vertex);
+                    let parent_to_add_to : &mut TreeNode = root_node.as_mut().expect("not none").find_insertion_parent(vertex);
                     parent_to_add_to.add_child(TreeNode::new_id(None,None,value));
                 },
                 None => {
@@ -842,7 +868,7 @@ mod tests {
 
     #[test]
     fn test_binary_tree_construct(){
-                let p1_1 = Vertex{x:10.0, y:1.0};
+        let p1_1 = Vertex{x:10.0, y:1.0};
         let p1_2 = Vertex{x:1.0,y:10.0};
         let l1 = Line::new(p1_1, p1_2);
         let scan_event = ScanEvent::new_event(EventType::START, l1.clone());
@@ -857,9 +883,9 @@ mod tests {
         let scan_event = ScanEvent::new_event(EventType::START, l2.clone());
         let scan_events = scan_events.add_event(scan_event);
         let scan_event = ScanEvent::new_event(EventType::END, l2.clone());
-        let scan_events = scan_events.add_event(scan_event);
+        let mut scan_events = scan_events.add_event(scan_event);
 
-        let binary_tree = BinaryTree::create(scan_events);
+        let binary_tree = BinaryTree::create(&mut scan_events);
 
         let root_right = binary_tree.root.right.as_ref().expect("root right is none");
         let v = root_right.event.vertx_for_event_type().clone();
@@ -871,7 +897,101 @@ mod tests {
         assert_eq!(v.x,1.0);
         assert_eq!(v.y,10.0);
         assert_eq!(root_left.event.event_type, EventType::END);
+        let root_right_left = root_right.left.as_ref().expect("root right left is none");
+         let v = root_right_left.event.vertx_for_event_type().clone();
+        assert_eq!(v.x,10.0);
+        assert_eq!(v.y,10.0);
 
     }
+
+    #[test]
+    fn test_find_ancestors(){
+                    let p1_1 = Vertex{x:10.0, y:1.0};
+        let p1_2 = Vertex{x:1.0,y:10.0};
+        let l1 = Line::new(p1_1, p1_2);
+        let scan_event = ScanEvent::new_event(EventType::START, l1.clone());
+       
+        let scan_events = ScanEvents::new();
+        let scan_events = scan_events.add_event(scan_event);
+        let scan_event = ScanEvent::new_event(EventType::END, l1.clone());
+        let scan_events = scan_events.add_event(scan_event);
+        let p1_1 = Vertex{x:1.0, y:1.0};
+        let p1_2 = Vertex{x:10.0,y:10.0};
+        let l2 = Line::new(p1_1, p1_2.clone());
+        let scan_event = ScanEvent::new_event(EventType::START, l2.clone());
+        let scan_events = scan_events.add_event(scan_event);
+        let scan_event = ScanEvent::new_event(EventType::END, l2.clone());
+        let mut scan_events = scan_events.add_event(scan_event);
+
+        let mut binary_tree = BinaryTree::create(&mut scan_events);
+
+        let node = binary_tree.root.find_parent_mut(p1_2.clone());      
+        let vtx = node.expect("parent is none").event.vertx_for_event_type().clone();
+        assert_eq!(vtx.x,10.0);
+        assert_eq!(vtx.y,1.0);
+        let node = binary_tree.root.find_parent_mut(vtx.clone());      
+        let vtx = node.expect("parent is none").event.vertx_for_event_type().clone();
+        assert_eq!(vtx.x,1.0);
+        assert_eq!(vtx.y,1.0);
+    }
+
+    #[test]
+    fn test_check_no_ancestor(){
+                    let p1_1 = Vertex{x:10.0, y:1.0};
+        let p1_2 = Vertex{x:1.0,y:10.0};
+        let l1 = Line::new(p1_1, p1_2);
+        let scan_event_start1 = ScanEvent::new_event(EventType::START, l1.clone());
+       
+        let scan_events = ScanEvents::new();
+        let  scan_events = scan_events.add_event(scan_event_start1);
+       
+        let p1_1 = Vertex{x:1.0, y:1.0};
+        let p1_2 = Vertex{x:10.0,y:10.0};
+        let l2 = Line::new(p1_1, p1_2.clone());
+        let scan_event_start2 = ScanEvent::new_event(EventType::START, l2.clone());
+        let mut scan_events = scan_events.add_event(scan_event_start2);
+        
+        
+        let mut binary_tree = BinaryTree::create(&mut scan_events);   
+         let root_right = binary_tree.root.right.as_ref().expect("root right is none");
+        let vtx = root_right.event.vertx_for_event_type().clone();
+        assert_eq!(vtx.x,10.0);
+        assert_eq!(vtx.y,1.0);
+        let node = binary_tree.root.find_parent_mut(vtx.clone());      
+        let vtx = node.expect("parent is none").event.vertx_for_event_type().clone();
+        assert_eq!(vtx.x,1.0);
+        assert_eq!(vtx.y,1.0);
+        let node = binary_tree.root.find_parent_mut(vtx.clone()); 
+        assert_eq!(node, None);
+    }
+
+    #[test]
+    fn test_find_ancestor_intersection(){
+        let p1_1 = Vertex{x:10.0, y:1.0};
+        let p1_2 = Vertex{x:1.0,y:10.0};
+        let l1 = Line::new(p1_1, p1_2);
+        let scan_event_start1 = ScanEvent::new_event(EventType::START, l1.clone());
+       
+        let scan_events = ScanEvents::new();
+        let  scan_events = scan_events.add_event(scan_event_start1);
+       
+        let p1_1 = Vertex{x:1.0, y:1.0};
+        let p1_2 = Vertex{x:10.0,y:10.0};
+        let l2 = Line::new(p1_1, p1_2.clone());
+        let scan_event_start2 = ScanEvent::new_event(EventType::START, l2.clone());
+        let mut scan_events = scan_events.add_event(scan_event_start2);
+        
+        
+        let mut binary_tree = BinaryTree::create(&mut scan_events);   
+        let root_right = binary_tree.root.right.as_mut().expect("root right is none");
+        let vtx = root_right.event.vertx_for_event_type().clone();
+        let line_right = root_right.event.lines.get(0).expect("Empty lines.").clone();
+        let node = binary_tree.root.find_parent_mut(vtx.clone());      
+        let line_parent = node.expect("Parent is none").event.lines.get(0).expect("Empty lines.").clone();
+        let vrtxo = line_parent.intersects(line_right);
+        assert_ne!(vrtxo, None);
+       
+    }
+
 
 }
